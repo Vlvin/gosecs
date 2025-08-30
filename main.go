@@ -1,6 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+)
 
 type SystemRunTime int
 
@@ -10,22 +15,22 @@ const (
 	SystemOnUpdate
 )
 
-type ECS struct {
+type ECS[SysArgs any] struct {
 	Components       map[ComponentName]map[Entity]Component
-	Systems          map[SystemRunTime][]System
+	Systems          map[SystemRunTime][]System[SysArgs]
 	EntitiesCount    int
 	EntitiesRegistry map[Entity][]ComponentName
 }
 
-func NewECS() *ECS {
-	return &ECS{
+func NewECS[SysArgs any]() *ECS[SysArgs] {
+	return &ECS[SysArgs]{
 		Components:    make(map[ComponentName]map[Entity]Component),
-		Systems:       make(map[SystemRunTime][]System),
+		Systems:       make(map[SystemRunTime][]System[SysArgs]),
 		EntitiesCount: 0,
 	}
 }
 
-func (e *ECS) RegisterComponent(component Component) bool {
+func (e *ECS[SysArgs]) RegisterComponent(component Component) bool {
 	_, ok := e.Components[component.GetName()]
 	if !ok {
 		e.Components[component.GetName()] = make(map[Entity]Component)
@@ -33,11 +38,11 @@ func (e *ECS) RegisterComponent(component Component) bool {
 	return !ok
 }
 
-func (e *ECS) RegisterSystem(time SystemRunTime, system System) {
+func (e *ECS[SysArgs]) RegisterSystem(time SystemRunTime, system System[SysArgs]) {
 	e.Systems[time] = append(e.Systems[time], system)
 }
 
-func (e *ECS) NewEntity(components ...Component) Entity {
+func (e *ECS[SysArgs]) NewEntity(components ...Component) Entity {
 	id := Entity(e.EntitiesCount)
 	e.EntitiesCount += 1
 	for i := range components {
@@ -47,7 +52,7 @@ func (e *ECS) NewEntity(components ...Component) Entity {
 	return id
 }
 
-func (e *ECS) EntitieWithComponent(componentName ComponentName) []Entity {
+func (e *ECS[SysArgs]) EntitieWithComponent(componentName ComponentName) []Entity {
 	entities := []Entity{}
 	for entity := range e.Components[componentName] {
 		entities = append(entities, entity)
@@ -55,7 +60,7 @@ func (e *ECS) EntitieWithComponent(componentName ComponentName) []Entity {
 	return entities
 }
 
-func (e *ECS) EntitiesWithComponents(componentNames ...ComponentName) []Entity {
+func (e *ECS[SysArgs]) EntitiesWithComponents(componentNames ...ComponentName) []Entity {
 	if len(componentNames) < 1 {
 		return []Entity{}
 	}
@@ -79,29 +84,31 @@ func (e *ECS) EntitiesWithComponents(componentNames ...ComponentName) []Entity {
 	return entities
 }
 
-func (e *ECS) Start() {
+func (e *ECS[SysArgs]) Start(args SysArgs) {
 	for _, system := range e.Systems[SystemOnStart] {
-		system(e)
+		system(e, args)
 	}
 }
 
-func (e *ECS) Update() {
+func (e *ECS[SysArgs]) Update(args SysArgs) bool {
+	run := true
 	for _, system := range e.Systems[SystemOnUpdate] {
-		system(e)
+		run = run && system(e, args)
 	}
+	return run
 }
 
-func (e *ECS) Exit() {
+func (e *ECS[SysArgs]) Exit(args SysArgs) {
 	for _, system := range e.Systems[SystemOnExit] {
-		system(e)
+		system(e, args)
 	}
 }
 
-func (e *ECS) Run() {
-	e.Start()
-	defer e.Exit()
-	for {
-		e.Update()
+func (e *ECS[SysArgs]) Run(args SysArgs) {
+	e.Start(args)
+	defer e.Exit(args)
+	for e.Update(args) {
+
 	}
 }
 
@@ -129,28 +136,47 @@ func (nc AgeComponent) GetName() ComponentName {
 	return "AgeComponent"
 }
 
-type System func(*ECS)
+type System[SysArgs any] func(*ECS[SysArgs], SysArgs) bool
 
-func SayHiSystem(ecs *ECS) {
+func SayHiSystem(ecs *ECS[struct{}], args struct{}) bool {
 	component_name := NameComponent{}.GetName()
 	for _, nameComponent := range ecs.Components[component_name] {
 		fmt.Printf("Hi %s\n", nameComponent.(NameComponent).name)
 	}
+	return true
 }
 
-func IntroSystem(ecs *ECS) {
+func IntroSystem(ecs *ECS[struct{}], args struct{}) bool {
 	nameComponentName, ageComponentName := NameComponent{}.GetName(), AgeComponent{}.GetName()
 	for _, entity := range ecs.EntitiesWithComponents(nameComponentName, ageComponentName) {
 		nameComponent := ecs.Components[nameComponentName][entity].(NameComponent)
 		ageComponent := ecs.Components[ageComponentName][entity].(AgeComponent)
 		fmt.Printf("Let me introduce my friend, %s, he is %d years old\n", nameComponent.name, ageComponent.age)
 	}
+	return true
+}
+
+func SystemOfAShutDownCreate() func(*ECS[struct{}], struct{}) bool {
+	c := make(chan os.Signal)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	terminate := false
+	go func() {
+		signal := <-c
+		fmt.Println()
+		fmt.Println(signal)
+		terminate = true
+	}()
+	return func(ecs *ECS[struct{}], args struct{}) bool {
+		return !terminate
+	}
+
 }
 
 func main() {
-	ecs := NewECS()
+	ecs := NewECS[struct{}]()
 	ecs.RegisterSystem(SystemOnExit, IntroSystem)
 	ecs.RegisterSystem(SystemOnExit, SayHiSystem)
+	ecs.RegisterSystem(SystemOnUpdate, SystemOfAShutDownCreate())
 	for _, person := range []struct {
 		name string
 		age  int
@@ -160,5 +186,5 @@ func main() {
 	for _, name := range []string{"Guy without age"} {
 		ecs.NewEntity(NameComponent{name})
 	}
-	ecs.Run()
+	ecs.Run(struct{}{})
 }
