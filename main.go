@@ -2,9 +2,17 @@ package main
 
 import "fmt"
 
+type SystemRunTime int
+
+const (
+	SystemOnStart SystemRunTime = iota
+	SystemOnExit
+	SystemOnUpdate
+)
+
 type ECS struct {
 	Components       map[ComponentName]map[Entity]Component
-	Systems          []System
+	Systems          map[SystemRunTime][]System
 	EntitiesCount    int
 	EntitiesRegistry map[Entity][]ComponentName
 }
@@ -12,6 +20,7 @@ type ECS struct {
 func NewECS() *ECS {
 	return &ECS{
 		Components:    make(map[ComponentName]map[Entity]Component),
+		Systems:       make(map[SystemRunTime][]System),
 		EntitiesCount: 0,
 	}
 }
@@ -24,8 +33,8 @@ func (e *ECS) RegisterComponent(component Component) bool {
 	return !ok
 }
 
-func (e *ECS) RegisterSystem(system System) {
-	e.Systems = append(e.Systems, system)
+func (e *ECS) RegisterSystem(time SystemRunTime, system System) {
+	e.Systems[time] = append(e.Systems[time], system)
 }
 
 func (e *ECS) NewEntity(components ...Component) Entity {
@@ -70,9 +79,29 @@ func (e *ECS) EntitiesWithComponents(componentNames ...ComponentName) []Entity {
 	return entities
 }
 
-func (e *ECS) Update() {
-	for _, system := range e.Systems {
+func (e *ECS) Start() {
+	for _, system := range e.Systems[SystemOnStart] {
 		system(e)
+	}
+}
+
+func (e *ECS) Update() {
+	for _, system := range e.Systems[SystemOnUpdate] {
+		system(e)
+	}
+}
+
+func (e *ECS) Exit() {
+	for _, system := range e.Systems[SystemOnExit] {
+		system(e)
+	}
+}
+
+func (e *ECS) Run() {
+	e.Start()
+	defer e.Exit()
+	for {
+		e.Update()
 	}
 }
 
@@ -120,8 +149,8 @@ func IntroSystem(ecs *ECS) {
 
 func main() {
 	ecs := NewECS()
-	ecs.RegisterSystem(IntroSystem)
-	ecs.RegisterSystem(SayHiSystem)
+	ecs.RegisterSystem(SystemOnExit, IntroSystem)
+	ecs.RegisterSystem(SystemOnExit, SayHiSystem)
 	for _, person := range []struct {
 		name string
 		age  int
@@ -131,5 +160,5 @@ func main() {
 	for _, name := range []string{"Guy without age"} {
 		ecs.NewEntity(NameComponent{name})
 	}
-	ecs.Update()
+	ecs.Run()
 }
