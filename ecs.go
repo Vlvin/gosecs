@@ -18,11 +18,15 @@ type ECS[SysStateT any] struct {
 }
 
 func NewECS[SysStateT any]() *ECS[SysStateT] {
-	return &ECS[SysStateT]{
+	result := &ECS[SysStateT]{
 		Components:    make(map[ComponentName]map[Entity]Component),
 		Systems:       make(map[SystemRunTime][]System[SysStateT]),
 		EntitiesCount: 0,
 	}
+	result.Systems[SystemOnStart] = []System[SysStateT]{}
+	result.Systems[SystemOnUpdate] = []System[SysStateT]{}
+	result.Systems[SystemOnExit] = []System[SysStateT]{}
+	return result
 }
 
 func (e *ECS[SysStateT]) RegisterComponent(component Component) bool {
@@ -101,28 +105,28 @@ func (e *ECS[SysStateT]) EntitiesWithComponents(componentNames ...ComponentName)
 	return entities
 }
 
-func (e *ECS[SysStateT]) Start(args SysStateT) bool {
+func (e *ECS[SysStateT]) RunSystems(sysTime SystemRunTime, args SysStateT) bool {
+	if _, value := e.Systems[sysTime]; !value {
+		fmt.Printf("No systems to run on %d\n", sysTime)
+		return false
+	}
 	ok := true
-	for _, system := range e.Systems[SystemOnStart] {
+	for _, system := range e.Systems[sysTime] {
 		ok = ok && system(e, args)
 	}
 	return ok
+}
+
+func (e *ECS[SysStateT]) Start(args SysStateT) bool {
+	return e.RunSystems(SystemOnStart, args)
 }
 
 func (e *ECS[SysStateT]) Update(args SysStateT) bool {
-	run := true
-	for _, system := range e.Systems[SystemOnUpdate] {
-		run = run && system(e, args)
-	}
-	return run
+	return e.RunSystems(SystemOnUpdate, args)
 }
 
 func (e *ECS[SysStateT]) Exit(args SysStateT) bool {
-	ok := true
-	for _, system := range e.Systems[SystemOnExit] {
-		ok = ok && system(e, args)
-	}
-	return ok
+	return e.RunSystems(SystemOnExit, args)
 }
 
 func (e *ECS[SysStateT]) Run(args SysStateT) error {
