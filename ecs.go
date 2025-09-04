@@ -37,6 +37,14 @@ func (e *ECS[SysStateT]) RegisterComponent(component Component) bool {
 	return !ok
 }
 
+func (e *ECS[SysStateT]) GetComponent(entity Entity, name ComponentName) Component {
+	return e.Components[name][entity]
+}
+
+func (e *ECS[SysStateT]) UpdateComponent(entity Entity, component Component) {
+	e.Components[component.GetName()][entity] = component
+}
+
 func (e *ECS[SysStateT]) RegisterSystem(time SystemRunTime, system System[SysStateT]) *ECS[SysStateT] {
 	e.Systems[time] = append(e.Systems[time], system)
 	return e

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	. "gosecs"
+	. "github.com/Vlvin/gosecs"
 	"os"
 	"os/signal"
 	"syscall"
