@@ -81,6 +81,7 @@ func (e *ECS[SysStateT]) NewEntity(components ...Component) Entity {
 	return id
 }
 
+// / NOTE: not a good way of searching entity with multiple components
 func (e *ECS[SysStateT]) EntitiesWithComponent(componentName ComponentName) []Entity {
 	entities := []Entity{}
 	for entity := range e.Components[componentName] {
@@ -90,27 +91,55 @@ func (e *ECS[SysStateT]) EntitiesWithComponent(componentName ComponentName) []En
 }
 
 func (e *ECS[SysStateT]) EntitiesWithComponents(componentNames ...ComponentName) []Entity {
+
 	if len(componentNames) < 1 {
 		return []Entity{}
 	}
-	s_entities := map[Entity]bool{}
-	for _, entity := range e.EntitiesWithComponent(componentNames[0]) {
-		s_entities[entity] = true
+
+	if len(componentNames) == 1 {
+		return e.EntitiesWithComponent(componentNames[0])
 	}
+
+	nameOfShortest := componentNames[0]
 	for _, componentName := range componentNames {
-		s_intersection := map[Entity]bool{}
-		for _, entity := range e.EntitiesWithComponent(componentName) {
-			s_intersection[entity] = s_entities[entity]
+		if len(e.Components[componentName]) < len(e.Components[nameOfShortest]) {
+			nameOfShortest = componentName
 		}
-		s_entities = s_intersection
 	}
+	// iterating over shortest, and checking for presence others
 	entities := []Entity{}
-	for entity, exists := range s_entities {
-		if exists {
+	for entity := range e.Components[nameOfShortest] {
+		fits := true
+		for _, componentName := range componentNames {
+			if _, ok := e.Components[componentName][entity]; !ok {
+				fits = false
+				break
+			}
+		}
+		if fits {
 			entities = append(entities, entity)
 		}
 	}
 	return entities
+	//
+	// s_entities := map[Entity]bool{}
+	// for _, entity := range e.EntitiesWithComponent(componentNames[0]) {
+	// 	s_entities[entity] = true
+	// }
+	// for _, componentName := range componentNames {
+	// 	s_intersection := map[Entity]bool{}
+	// 	for _, entity := range e.EntitiesWithComponent(componentName) {
+	// 		s_intersection[entity] = s_entities[entity]
+	// 	}
+	// 	s_entities = s_intersection
+	// }
+	// entities := []Entity{}
+	// for entity, exists := range s_entities {
+	// 	if exists {
+	// 		entities = append(entities, entity)
+	// 	}
+	// }
+	// return entities
 }
 
 func (e *ECS[SysStateT]) RunSystems(sysTime SystemRunTime, args SysStateT) bool {
