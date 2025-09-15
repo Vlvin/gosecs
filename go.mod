@@ -1,3 +1,3 @@
-module github.com/Vlvin/gosecs/v2
+module github.com/Vlvin/gosecs
 
 go 1.24.6
