@@ -1,6 +1,9 @@
 package secs
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 type SystemRunTime int
 
@@ -13,20 +16,26 @@ const (
 type SystemID = int
 type ECS[SysStateT any] struct {
 	Components     map[ComponentName]map[Entity]Component
-	SystemsIndices map[SystemRunTime][]int
+	SystemsIndices map[SystemRunTime][]SystemID
 	Systems        []System[SysStateT]
 	EntitiesCount  int
 	// Events
+	onEntityCreated    map[SystemID]func(*ECS[SysStateT], Entity, ...Component)
+	onEntityRemoved    map[SystemID]func(*ECS[SysStateT], Entity)
 	onComponentAdded   map[SystemID]func(*ECS[SysStateT], Entity, Component)
 	onComponentRemoved map[SystemID]func(*ECS[SysStateT], Entity, Component)
 }
 
 func NewECS[SysStateT any]() *ECS[SysStateT] {
 	result := &ECS[SysStateT]{
-		Components:     make(map[ComponentName]map[Entity]Component),
-		SystemsIndices: make(map[SystemRunTime][]int),
-		Systems:        []System[SysStateT]{},
-		EntitiesCount:  0,
+		Components:         make(map[ComponentName]map[Entity]Component),
+		SystemsIndices:     make(map[SystemRunTime][]int),
+		Systems:            []System[SysStateT]{},
+		EntitiesCount:      0,
+		onEntityCreated:    make(map[SystemID]func(*ECS[SysStateT], Entity, ...Component)),
+		onEntityRemoved:    make(map[SystemID]func(*ECS[SysStateT], Entity)),
+		onComponentAdded:   make(map[SystemID]func(*ECS[SysStateT], Entity, Component)),
+		onComponentRemoved: make(map[SystemID]func(*ECS[SysStateT], Entity, Component)),
 	}
 	result.SystemsIndices[SystemOnStart] = []int{}
 	result.SystemsIndices[SystemOnUpdate] = []int{}
@@ -34,28 +43,72 @@ func NewECS[SysStateT any]() *ECS[SysStateT] {
 	return result
 }
 
-func (e *ECS[SysStateT]) AssignOnComponentAdded(id SystemID, f func(*ECS[SysStateT], Entity, Component)) {
-	e.onComponentAdded[id] = f
-}
+func (e *ECS[SysStateT]) OnEntityCreated(entity Entity, components ...Component) {
+	var wg sync.WaitGroup
+	for _, handler := range e.onEntityCreated {
+		if handler != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				handler(e, entity, components...)
+			}()
+		}
+	}
+	wg.Wait()
 
+}
+func (e *ECS[SysStateT]) OnEntityRemoved(entity Entity) {
+	var wg sync.WaitGroup
+	for _, handler := range e.onEntityRemoved {
+		if handler != nil {
+			wg.Add(1)
+			go func() {
+				handler(e, entity)
+			}()
+		}
+	}
+	wg.Wait()
+
+}
 func (e *ECS[SysStateT]) OnComponentAdded(entity Entity, component Component) {
-	for _, f := range e.onComponentAdded {
-		if f != nil {
-			f(e, entity, component)
+	var wg sync.WaitGroup
+	for _, handler := range e.onComponentAdded {
+		if handler != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				handler(e, entity, component)
+			}()
 		}
 	}
-}
+	wg.Wait()
 
-func (e *ECS[SysStateT]) AssignOnComponentRemoved(id SystemID, f func(*ECS[SysStateT], Entity, Component)) {
-	e.onComponentRemoved[id] = f
 }
-
 func (e *ECS[SysStateT]) OnComponentRemoved(entity Entity, component Component) {
-	for _, f := range e.onComponentRemoved {
-		if f != nil {
-			f(e, entity, component)
+	var wg sync.WaitGroup
+	for _, handler := range e.onComponentRemoved {
+		if handler != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				handler(e, entity, component)
+			}()
 		}
 	}
+	wg.Wait()
+}
+
+func (e *ECS[SysStateT]) AssignOnEntityCreated(system System[SysStateT], handler func(*ECS[SysStateT], Entity, ...Component)) {
+	e.onEntityCreated[SystemID(len(e.Systems))] = handler
+}
+func (e *ECS[SysStateT]) AssignOnEntityRemoved(system System[SysStateT], handler func(*ECS[SysStateT], Entity)) {
+	e.onEntityRemoved[SystemID(len(e.Systems))] = handler
+}
+func (e *ECS[SysStateT]) AssignOnComponentAdded(system System[SysStateT], handler func(*ECS[SysStateT], Entity, Component)) {
+	e.onComponentAdded[SystemID(len(e.Systems))] = handler
+}
+func (e *ECS[SysStateT]) AssignOnComponentRemoved(system System[SysStateT], handler func(*ECS[SysStateT], Entity, Component)) {
+	e.onComponentRemoved[SystemID(len(e.Systems))] = handler
 }
 
 func (e *ECS[SysStateT]) RegisterComponent(component Component) bool {
@@ -82,9 +135,31 @@ func (e *ECS[SysStateT]) AddComponent(entity Entity, component Component) {
 	e.Components[component.GetName()][entity] = component
 }
 
+func (e *ECS[SysStateT]) HasComponent(entity Entity, componentName ComponentName) bool {
+
+	_, ok := e.Components[componentName][entity]
+	return ok
+}
+
+func (e *ECS[SysStateT]) HasComponents(entity Entity, componentNames ...ComponentName) bool {
+
+	for _, componentName := range componentNames {
+		if !e.HasComponent(entity, componentName) {
+			return false
+		}
+	}
+	return true
+}
+
 func (e *ECS[SysStateT]) RegisterSystem(time SystemRunTime, system System[SysStateT]) *ECS[SysStateT] {
 	e.Systems = append(e.Systems, system)
-	e.SystemsIndices[time] = append(e.SystemsIndices[time], len(e.Systems)-1)
+	var systemID = SystemID(len(e.Systems) - 1)
+	e.SystemsIndices[time] = append(e.SystemsIndices[time], systemID)
+	// e.onComponentAdded[systemID] = true
+	// e.onComponentRemoved[systemID] = true
+	// e.onEntityCreated[systemID] = true
+	// e.onEntityRemoved[systemID] = true
+	e.Systems[systemID].Init(e)
 	return e
 }
 
@@ -116,17 +191,8 @@ func (e *ECS[SysStateT]) NewEntity(components ...Component) Entity {
 		e.RegisterComponent(components[i])
 		e.Components[components[i].GetName()][id] = components[i]
 	}
-	for i, system := range e.Systems {
-		ok := true
-		for _, comp := range system.RequiredComponents() {
-			if _, ok = e.Components[comp][id]; !ok {
-				break
-			}
-		}
-		if ok {
-			e.Systems[i].AddEntity(id)
-		}
-	}
+	e.OnEntityCreated(id, components...)
+
 	return id
 }
 
@@ -170,25 +236,6 @@ func (e *ECS[SysStateT]) EntitiesWithComponents(componentNames ...ComponentName)
 		}
 	}
 	return entities
-	//
-	// s_entities := map[Entity]bool{}
-	// for _, entity := range e.EntitiesWithComponent(componentNames[0]) {
-	// 	s_entities[entity] = true
-	// }
-	// for _, componentName := range componentNames {
-	// 	s_intersection := map[Entity]bool{}
-	// 	for _, entity := range e.EntitiesWithComponent(componentName) {
-	// 		s_intersection[entity] = s_entities[entity]
-	// 	}
-	// 	s_entities = s_intersection
-	// }
-	// entities := []Entity{}
-	// for entity, exists := range s_entities {
-	// 	if exists {
-	// 		entities = append(entities, entity)
-	// 	}
-	// }
-	// return entities
 }
 
 func (e *ECS[SysStateT]) RunSystems(sysTime SystemRunTime, args SysStateT) bool {
@@ -216,6 +263,10 @@ func (e *ECS[SysStateT]) Exit(args SysStateT) bool {
 }
 
 func (e *ECS[SysStateT]) Run(args SysStateT) error {
+	// for i := range e.Systems {
+	// e.Systems[i].Init(e)
+
+	// }
 	if !e.Start(args) {
 		return fmt.Errorf("Something went wrong on ECS.Start()")
 	}
@@ -243,8 +294,4 @@ type System[SysStateT any] interface {
 	Run(e *ECS[SysStateT], args SysStateT) bool
 	/// This is used to filter Entities that does not have some components that Sysytem requires
 	RequiredComponents() []ComponentName
-	/// Adds entity to the systems
-	AddEntity(entity Entity)
-	/// Removes entity from the system
-	RemoveEntity(entity Entity)
 }
