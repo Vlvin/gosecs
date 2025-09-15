@@ -293,5 +293,62 @@ type System[SysStateT any] interface {
 	Init(e *ECS[SysStateT]) bool
 	Run(e *ECS[SysStateT], args SysStateT) bool
 	/// This is used to filter Entities that does not have some components that Sysytem requires
-	RequiredComponents() []ComponentName
+	// RequiredComponents() []ComponentName
+}
+
+type SystemBase[SysStateT any] struct {
+	System[SysStateT]
+	RequiredComponents []ComponentName
+	Entities           map[Entity]bool
+}
+
+//
+// func (s *SystemBase[SysArgsT]) RequiredComponents() []ComponentName {
+// 	return []ComponentName{}
+// }
+
+func (s *SystemBase[SysArgsT]) AssignToAllEvents(e *ECS[SysArgsT]) bool {
+	// s.entities = make(map[Entity]bool)
+	e.AssignOnComponentAdded(s, s.OnComponentAdded)
+	e.AssignOnComponentRemoved(s, s.OnComponentRemoved)
+	e.AssignOnEntityCreated(s, s.OnEntityCreated)
+	e.AssignOnEntityRemoved(s, s.OnEntityRemoved)
+	// for _, entity := range e.EntitiesWithComponents(s.RequiredComponents()...) {
+	// 	s.entities[entity] = true
+	// }
+	return true
+}
+
+// onComponentAdded implements secs.System.
+func (s *SystemBase[SysArgsT]) OnComponentAdded(e *ECS[SysArgsT], entity Entity, component Component) {
+	if s.Entities[entity] {
+		return
+	}
+	if e.HasComponents(entity, s.RequiredComponents...) {
+		s.Entities[entity] = true
+	}
+}
+
+// onComponentRemoved implements secs.System.
+func (s *SystemBase[SysArgsT]) OnComponentRemoved(e *ECS[SysArgsT], entity Entity, component Component) {
+	if !s.Entities[entity] {
+		return
+	}
+	for _, componentName := range s.RequiredComponents {
+		if componentName == component.GetName() {
+			delete(s.Entities, entity)
+		}
+	}
+}
+
+// onEntityCreated implements secs.System.
+func (s *SystemBase[SysArgsT]) OnEntityCreated(e *ECS[SysArgsT], entity Entity, components ...Component) {
+	if e.HasComponents(entity, s.RequiredComponents...) {
+		s.Entities[entity] = true
+	}
+}
+
+// onEntityRemoved implements secs.System.
+func (s *SystemBase[SysArgsT]) OnEntityRemoved(e *ECS[SysArgsT], entity Entity) {
+	delete(s.Entities, entity)
 }

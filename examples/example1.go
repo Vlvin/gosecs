@@ -29,33 +29,38 @@ func (nc AgeComponent) GetName() ComponentName {
 }
 
 type SayHiSystem struct {
-	entities map[Entity]bool
+	SystemBase[*StateT]
+	// Entities map[Entity]bool
 }
 
 // Init implements secs.System.
 func (s *SayHiSystem) Init(e *ECS[*StateT]) bool {
-	s.entities = make(map[Entity]bool)
-	e.AssignOnComponentAdded(s, s.OnComponentAdded)
-	e.AssignOnComponentRemoved(s, s.OnComponentRemoved)
-	e.AssignOnEntityCreated(s, s.OnEntityCreated)
-	e.AssignOnEntityRemoved(s, s.OnEntityRemoved)
-	for _, entity := range e.EntitiesWithComponents(s.RequiredComponents()...) {
-		s.entities[entity] = true
+	s.Entities = make(map[Entity]bool)
+	s.RequiredComponents = []ComponentName{
+		NameComponent{}.GetName(),
+	}
+	s.SystemBase.AssignToAllEvents(e)
+	// e.AssignOnComponentAdded(s, s.OnComponentAdded)
+	// e.AssignOnComponentRemoved(s, s.OnComponentRemoved)
+	// e.AssignOnEntityCreated(s, s.OnEntityCreated)
+	// e.AssignOnEntityRemoved(s, s.OnEntityRemoved)
+	for _, entity := range e.EntitiesWithComponents(s.RequiredComponents...) {
+		s.Entities[entity] = true
 	}
 	return true
 }
 
-// RequiredComponents implements secs.System.
-func (s SayHiSystem) RequiredComponents() []ComponentName {
-	return []ComponentName{
-		NameComponent{}.GetName(),
-	}
-}
+// // RequiredComponents implements secs.System.
+// func (s SayHiSystem) RequiredComponents() []ComponentName {
+// 	return []ComponentName{
+// 		NameComponent{}.GetName(),
+// 	}
+// }
 
 // Run implements secs.System.
 func (s SayHiSystem) Run(e *ECS[*StateT], args *StateT) bool {
 	component_name := NameComponent{}.GetName()
-	for entity, alive := range s.entities {
+	for entity, alive := range s.Entities {
 		if !alive {
 			continue
 		}
@@ -64,69 +69,81 @@ func (s SayHiSystem) Run(e *ECS[*StateT], args *StateT) bool {
 	return true
 }
 
-// onComponentAdded implements secs.System.
-func (s SayHiSystem) OnComponentAdded(e *ECS[*StateT], entity Entity, component Component) {
-	if s.entities[entity] {
-		return
-	}
-	if e.HasComponents(entity, s.RequiredComponents()...) {
-		s.entities[entity] = true
-	}
-}
-
-// onComponentRemoved implements secs.System.
-func (s SayHiSystem) OnComponentRemoved(e *ECS[*StateT], entity Entity, component Component) {
-	if !s.entities[entity] {
-		return
-	}
-	for _, componentName := range s.RequiredComponents() {
-		if componentName == component.GetName() {
-			delete(s.entities, entity)
-		}
-	}
-}
-
-// onEntityCreated implements secs.System.
-func (s *SayHiSystem) OnEntityCreated(e *ECS[*StateT], entity Entity, components ...Component) {
-	if e.HasComponents(entity, s.RequiredComponents()...) {
-		s.entities[entity] = true
-	}
-}
-
-// onEntityRemoved implements secs.System.
-func (s *SayHiSystem) OnEntityRemoved(e *ECS[*StateT], entity Entity) {
-	delete(s.entities, entity)
-}
-
+// // onComponentAdded implements secs.System.
+//
+//	func (s SayHiSystem) OnComponentAdded(e *ECS[*StateT], entity Entity, component Component) {
+//		if s.Entities[entity] {
+//			return
+//		}
+//		if e.HasComponents(entity, s.RequiredComponents()...) {
+//			s.Entities[entity] = true
+//		}
+//	}
+//
+// // onComponentRemoved implements secs.System.
+//
+//	func (s SayHiSystem) OnComponentRemoved(e *ECS[*StateT], entity Entity, component Component) {
+//		if !s.Entities[entity] {
+//			return
+//		}
+//		for _, componentName := range s.RequiredComponents() {
+//			if componentName == component.GetName() {
+//				delete(s.Entities, entity)
+//			}
+//		}
+//	}
+//
+// // onEntityCreated implements secs.System.
+//
+//	func (s *SayHiSystem) OnEntityCreated(e *ECS[*StateT], entity Entity, components ...Component) {
+//		if e.HasComponents(entity, s.RequiredComponents()...) {
+//			s.Entities[entity] = true
+//		}
+//	}
+//
+// // onEntityRemoved implements secs.System.
+//
+//	func (s *SayHiSystem) OnEntityRemoved(e *ECS[*StateT], entity Entity) {
+//		delete(s.Entities, entity)
+//	}
 type IntroSystem struct {
-	entities map[Entity]bool
+	SystemBase[*StateT]
+	// Entities map[Entity]bool
 }
 
 // Init implements secs.System.
 func (s *IntroSystem) Init(e *ECS[*StateT]) bool {
-	s.entities = make(map[Entity]bool)
-	e.AssignOnComponentAdded(s, s.OnComponentAdded)
-	e.AssignOnComponentRemoved(s, s.OnComponentRemoved)
-	e.AssignOnEntityCreated(s, s.OnEntityCreated)
-	e.AssignOnEntityRemoved(s, s.OnEntityRemoved)
-	for _, entity := range e.EntitiesWithComponents(s.RequiredComponents()...) {
-		s.entities[entity] = true
+	s.Entities = make(map[Entity]bool)
+	s.RequiredComponents = []ComponentName{
+		NameComponent{}.GetName(),
+		AgeComponent{}.GetName(),
+	}
+	s.SystemBase.AssignToAllEvents(e)
+	// e.AssignOnComponentAdded(s, s.OnComponentAdded)
+	// e.AssignOnComponentRemoved(s, s.OnComponentRemoved)
+	// e.AssignOnEntityCreated(s, s.OnEntityCreated)
+	// e.AssignOnEntityRemoved(s, s.OnEntityRemoved)
+	for _, entity := range e.EntitiesWithComponents(s.RequiredComponents...) {
+		s.Entities[entity] = true
 	}
 	return true
 }
 
 // RequiredComponents implements secs.System.
-func (s IntroSystem) RequiredComponents() []ComponentName {
-	return []ComponentName{
-		NameComponent{}.GetName(),
-		AgeComponent{}.GetName(),
-	}
-}
+// func (s IntroSystem) RequiredComponents() []ComponentName {
+// 	return []ComponentName{
+// 		NameComponent{}.GetName(),
+// 		AgeComponent{}.GetName(),
+// 	}
+// }
 
 // Run implements secs.System.
 func (s IntroSystem) Run(e *ECS[*StateT], args *StateT) bool {
 	nameComponentName, ageComponentName := NameComponent{}.GetName(), AgeComponent{}.GetName()
-	for _, entity := range e.EntitiesWithComponents(nameComponentName, ageComponentName) {
+	for entity, alive := range s.Entities {
+		if !alive {
+			continue
+		}
 		nameComponent := e.Components[nameComponentName][entity].(NameComponent)
 		ageComponent := e.Components[ageComponentName][entity].(AgeComponent)
 		fmt.Printf("Let me introduce my friend, %s, he is %d years old\n", nameComponent.name, ageComponent.age)
@@ -134,40 +151,43 @@ func (s IntroSystem) Run(e *ECS[*StateT], args *StateT) bool {
 	return true
 }
 
-// onComponentAdded implements secs.System.
-func (s IntroSystem) OnComponentAdded(e *ECS[*StateT], entity Entity, component Component) {
-	if s.entities[entity] {
-		return
-	}
-	if e.HasComponents(entity, s.RequiredComponents()...) {
-		s.entities[entity] = true
-	}
-}
-
-// onComponentRemoved implements secs.System.
-func (s IntroSystem) OnComponentRemoved(e *ECS[*StateT], entity Entity, component Component) {
-	if !s.entities[entity] {
-		return
-	}
-	for _, componentName := range s.RequiredComponents() {
-		if componentName == component.GetName() {
-			delete(s.entities, entity)
-		}
-	}
-}
-
-// onEntityCreated implements secs.System.
-func (s *IntroSystem) OnEntityCreated(e *ECS[*StateT], entity Entity, components ...Component) {
-	if e.HasComponents(entity, s.RequiredComponents()...) {
-		s.entities[entity] = true
-	}
-}
-
-// onEntityRemoved implements secs.System.
-func (s *IntroSystem) OnEntityRemoved(e *ECS[*StateT], entity Entity) {
-	delete(s.entities, entity)
-}
-
+// // onComponentAdded implements secs.System.
+//
+//	func (s IntroSystem) OnComponentAdded(e *ECS[*StateT], entity Entity, component Component) {
+//		if s.entities[entity] {
+//			return
+//		}
+//		if e.HasComponents(entity, s.RequiredComponents()...) {
+//			s.entities[entity] = true
+//		}
+//	}
+//
+// // onComponentRemoved implements secs.System.
+//
+//	func (s IntroSystem) OnComponentRemoved(e *ECS[*StateT], entity Entity, component Component) {
+//		if !s.entities[entity] {
+//			return
+//		}
+//		for _, componentName := range s.RequiredComponents() {
+//			if componentName == component.GetName() {
+//				delete(s.entities, entity)
+//			}
+//		}
+//	}
+//
+// // onEntityCreated implements secs.System.
+//
+//	func (s *IntroSystem) OnEntityCreated(e *ECS[*StateT], entity Entity, components ...Component) {
+//		if e.HasComponents(entity, s.RequiredComponents()...) {
+//			s.entities[entity] = true
+//		}
+//	}
+//
+// // onEntityRemoved implements secs.System.
+//
+//	func (s *IntroSystem) OnEntityRemoved(e *ECS[*StateT], entity Entity) {
+//		delete(s.entities, entity)
+//	}
 type SystemOfAShutDown[SysStateT any] struct {
 	shutDown bool
 }
